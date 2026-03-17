@@ -86,10 +86,7 @@ export function App() {
       )}
 
       {pipContainer && createPortal(
-        <PipContent
-          mainCountdown={mainCountdown}
-          onClose={closePip}
-        />,
+        <PipContent mainCountdown={mainCountdown} />,
         pipContainer
       )}
     </div>
