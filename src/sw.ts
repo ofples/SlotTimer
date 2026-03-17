@@ -1,10 +1,24 @@
 /// <reference lib="webworker" />
 import { precacheAndRoute } from 'workbox-precaching'
+import { registerRoute } from 'workbox-routing'
+import { CacheFirst } from 'workbox-strategies'
+import { RangeRequestsPlugin } from 'workbox-range-requests'
 import { nextTick, formatCountdown } from './lib/snapLogic'
 
 declare const self: ServiceWorkerGlobalScope
 
 precacheAndRoute(self.__WB_MANIFEST)
+
+// Cache audio files at runtime on first request (CacheFirst).
+// RangeRequestsPlugin is required so the browser's range requests
+// (used when seeking/streaming audio) are served correctly from cache.
+registerRoute(
+  ({ request }) => request.destination === 'audio',
+  new CacheFirst({
+    cacheName: 'audio-v1',
+    plugins: [new RangeRequestsPlugin()],
+  })
+)
 
 const TAG = 'slottimer'
 

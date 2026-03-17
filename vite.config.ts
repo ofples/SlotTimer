@@ -31,7 +31,7 @@ export default defineConfig({
         ]
       },
       injectManifest: {
-        globPatterns: ['**/*.{js,css,html,png,mp3}']
+        globPatterns: ['**/*.{js,css,html,png}'], // mp3s cached at runtime, not precached
       }
     })
   ]
