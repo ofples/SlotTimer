@@ -2,6 +2,21 @@ import { TimerConfig } from '../types'
 import { IntervalPicker } from './IntervalPicker'
 import { SnapConfig } from './SnapConfig'
 
+const VERSION = import.meta.env.VITE_APP_VERSION as string
+
+async function forceUpdate() {
+  const reg = await navigator.serviceWorker?.getRegistration()
+  if (!reg) { location.reload(); return }
+  await reg.update()
+  const sw = reg.waiting ?? reg.installing
+  if (sw) {
+    sw.postMessage({ type: 'SKIP_WAITING' })
+    navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true })
+  } else {
+    location.reload()
+  }
+}
+
 const MAIN_PRESETS = [10, 15, 30]
 const SUB_PRESETS  = [5, 10, 15]
 
@@ -79,6 +94,10 @@ export function ConfigScreen({ config, onChange, onStart, visible }: Props) {
           Start
         </button>
       </div>
+
+      <span className="version-label" onDoubleClick={forceUpdate}>
+        v{VERSION}
+      </span>
     </div>
   )
 }

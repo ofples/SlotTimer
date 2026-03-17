@@ -47,6 +47,11 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
   const data = event.data as { type: string; mainMs?: number; phase?: number }
   if (!data?.type) return
 
+  if (data.type === 'SKIP_WAITING') {
+    self.skipWaiting()
+    return
+  }
+
   if (data.type === 'CLEAR_NOTIFICATION') {
     timerMainMs = 0
     timerPhase  = 0

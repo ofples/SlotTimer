@@ -75,6 +75,18 @@ body {
   pointer-events: none;
 }
 
+/* ── Version label ─────────────────────────────────────────── */
+.version-label {
+  position: absolute;
+  bottom: max(env(safe-area-inset-bottom, 0px), 8px);
+  left: 12px;
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.4;
+  user-select: none;
+  cursor: default;
+}
+
 /* ── Config Screen ─────────────────────────────────────────── */
 .config-screen {
   justify-content: center;
