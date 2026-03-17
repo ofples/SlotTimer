@@ -2,6 +2,37 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { TimerConfig } from '../types'
 import { nextTick, nextSubTick, mainProgress, formatCountdown } from '../lib/snapLogic'
 
+// ── Session persistence ────────────────────────────────────────
+// Saves enough state to resume the timer after a page refresh.
+// The phase is the only value that can't be recomputed from config.
+
+const SESSION_KEY = 'slottimer-session'
+
+interface TimerSession {
+  phase: number
+  mainMs: number
+  subMs: number
+}
+
+function saveSession(s: TimerSession) {
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify(s)) } catch { /* ignore */ }
+}
+
+function loadSession(): TimerSession | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY)
+    return raw ? (JSON.parse(raw) as TimerSession) : null
+  } catch { return null }
+}
+
+function clearSession() {
+  try { localStorage.removeItem(SESSION_KEY) } catch { /* ignore */ }
+}
+
+export function hasTimerSession(): boolean {
+  return localStorage.getItem(SESSION_KEY) !== null
+}
+
 interface TimerState {
   mainCountdown: string   // MM:SS
   subCountdown: string    // MM:SS
@@ -12,6 +43,7 @@ interface UseTimerReturn extends TimerState {
   isRunning: boolean
   start: () => void
   stop: () => void
+  resumeBgAudio: () => void
 }
 
 // ── Audio ──────────────────────────────────────────────────────
@@ -35,34 +67,39 @@ function playSound(audio: HTMLAudioElement | null, volume: number) {
 
 // ── Silent audio keep-alive ────────────────────────────────────
 //
-// Chrome throttles setTimeout on backgrounded tabs, which causes bells to
-// fire late or not at all. Playing inaudible audio exempts the page from
-// background throttling. We create a looping near-silent Web Audio source
-// so no extra file is needed and no audible sound is produced.
+// Chrome/Android throttle setTimeout on backgrounded tabs, which causes bells
+// to fire late or not at all.  Playing audio via an HTMLAudioElement exempts
+// the page from background throttling AND activates the MediaSession API so
+// that lock-screen / notification-shade controls appear on Android.
+//
+// An AudioContext alone does NOT trigger MediaSession on Android — a real
+// HTMLAudioElement is required.  keepalive.mp3 is a 440 Hz sine at −60 dB:
+// audible frequency so Chrome/Android don't classify it as silent, but
+// −60 dB amplitude is imperceptible at any normal listening volume.
 
-function startSilentAudio(ref: React.MutableRefObject<AudioContext | null>) {
+function startBgAudio(
+  ref: React.MutableRefObject<HTMLAudioElement | null>,
+  track: 1 | 2 | 3,
+  volume: number,
+) {
   if (ref.current) return
   try {
-    const ctx = new AudioContext()
-    // 1-second buffer of near-silence (0.001 amplitude avoids pure-silence
-    // optimisations that some browsers apply to muted contexts)
-    const buf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate)
-    const data = buf.getChannelData(0)
-    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.001
-    const src = ctx.createBufferSource()
-    src.buffer = buf
-    src.loop = true
-    src.connect(ctx.destination)
-    src.start()
-    ref.current = ctx
-  } catch {
-    // AudioContext not available — not critical
+    const audio  = new Audio(`/sounds/bg${track}.mp3`)
+    audio.loop   = true
+    audio.volume = Math.max(0.01, volume)
+    audio.play().catch(() => { /* blocked — caller should retry via resumeBgAudio */ })
+    ref.current  = audio
+  } catch (e) {
+    console.warn('[SlotTimer] bg audio setup failed:', e)
   }
 }
 
-function stopSilentAudio(ref: React.MutableRefObject<AudioContext | null>) {
-  ref.current?.close().catch(() => {})
-  ref.current = null
+function stopBgAudio(ref: React.MutableRefObject<HTMLAudioElement | null>) {
+  if (ref.current) {
+    ref.current.pause()
+    ref.current.src = ''
+    ref.current     = null
+  }
 }
 
 // ── Wake Lock ──────────────────────────────────────────────────
@@ -115,7 +152,7 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
   const bellRef           = useRef<HTMLAudioElement | null>(null)
   const wakeLockRef       = useRef<WakeLockSentinel | null>(null)
   const notifGrantedRef   = useRef(false)
-  const silentAudioRef    = useRef<AudioContext | null>(null)
+  const silentAudioRef    = useRef<HTMLAudioElement | null>(null)
 
   // Preload audio on mount
   useEffect(() => {
@@ -151,6 +188,9 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
 
   const fireNotification = useCallback(() => {
     if (!notifGrantedRef.current) return
+    // Only notify when hidden — the renderer already plays the gong when visible,
+    // so firing a notification too would double up the sound.
+    if (!document.hidden) return
     // Pass current timer state so the SW can self-heal if it was terminated
     // and lost its module-level timerMainMs/timerPhase.
     postToSW({
@@ -226,9 +266,16 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
 
     mainIntervalMsRef.current = mainMs
     subIntervalMsRef.current  = subMs
-    phaseRef.current = config.snapEnabled
-      ? config.snapOffset * 60_000
-      : now % mainMs
+
+    // Restore saved phase if the interval settings match; otherwise compute fresh.
+    const session = loadSession()
+    phaseRef.current = (session?.mainMs === mainMs && session?.subMs === subMs)
+      ? session.phase
+      : config.snapEnabled
+        ? config.snapOffset * 60_000
+        : now % mainMs
+
+    saveSession({ phase: phaseRef.current, mainMs, subMs })
 
     isRunningRef.current = true
     setIsRunning(true)
@@ -236,17 +283,23 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
     scheduleNextTick()
     rafRef.current = requestAnimationFrame(rafLoop)
 
-    // Silent audio loop — prevents Chrome from throttling JS timers in background
-    startSilentAudio(silentAudioRef)
+    // Background audio — prevents throttling and activates MediaSession
+    startBgAudio(silentAudioRef, config.bgTrack, config.bgVolume)
 
-    // MediaSession — labels the audio source on the lock screen / notification shade
+    // MediaSession — lock screen / notification shade controls
     if ('mediaSession' in navigator) {
       navigator.mediaSession.metadata = new MediaMetadata({
-        title: 'SlotTimer',
-        artist: `Every ${config.mainInterval} min`,
+        title:   'SlotTimer',
+        artist:  `Every ${config.mainInterval} min`,
+        artwork: [
+          { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+        ],
       })
-      navigator.mediaSession.setActionHandler('stop', stop)
+      navigator.mediaSession.playbackState = 'playing'
+      navigator.mediaSession.setActionHandler('stop',  stop)
       navigator.mediaSession.setActionHandler('pause', stop)
+      navigator.mediaSession.setActionHandler('play',  null)  // hide play button
     }
 
     // Wake lock — keep screen on
@@ -262,24 +315,53 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
   const stop = useCallback(() => {
     isRunningRef.current = false
     setIsRunning(false)
+    clearSession()
 
     if (tickTimerRef.current)  { clearTimeout(tickTimerRef.current);   tickTimerRef.current  = null }
     if (rafRef.current)        { cancelAnimationFrame(rafRef.current); rafRef.current        = null }
 
-    stopSilentAudio(silentAudioRef)
-    if ('mediaSession' in navigator) navigator.mediaSession.metadata = null
+    stopBgAudio(silentAudioRef)
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata      = null
+      navigator.mediaSession.playbackState = 'none'
+      navigator.mediaSession.setActionHandler('stop',  null)
+      navigator.mediaSession.setActionHandler('pause', null)
+      navigator.mediaSession.setActionHandler('play',  null)
+    }
     releaseWakeLock(wakeLockRef)
     postToSW({ type: 'CLEAR_NOTIFICATION' })
     setState({ mainCountdown: '--:--', subCountdown: '--:--', progress: 0 })
   }, [])
+
+  // Live-update bg track while running
+  useEffect(() => {
+    const audio = silentAudioRef.current
+    if (!audio) return
+    audio.src = `/sounds/bg${config.bgTrack}.mp3`
+    audio.load()
+    audio.play().catch(() => {})
+  }, [config.bgTrack])
+
+  // Live-update bg volume while running
+  useEffect(() => {
+    if (!silentAudioRef.current) return
+    silentAudioRef.current.volume = Math.max(0.01, config.bgVolume)
+  }, [config.bgVolume])
 
   // Cleanup on unmount
   useEffect(() => () => {
     if (tickTimerRef.current)  clearTimeout(tickTimerRef.current)
     if (rafRef.current)        cancelAnimationFrame(rafRef.current)
     releaseWakeLock(wakeLockRef)
-    stopSilentAudio(silentAudioRef)
+    stopBgAudio(silentAudioRef)
   }, [])
 
-  return { ...state, isRunning, start, stop }
+  // Called from any user interaction on the running screen to unblock autoplay
+  // when the timer was auto-restored after a page refresh.
+  const resumeBgAudio = useCallback(() => {
+    const audio = silentAudioRef.current
+    if (audio?.paused) audio.play().catch(() => {})
+  }, [])
+
+  return { ...state, isRunning, start, stop, resumeBgAudio }
 }

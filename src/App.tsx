@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import './App.css'
 import { TimerConfig, AppState } from './types'
-import { useTimer } from './hooks/useTimer'
+import { useTimer, hasTimerSession } from './hooks/useTimer'
 import { usePip } from './hooks/usePip'
 import { ConfigScreen } from './components/ConfigScreen'
 import { RunningScreen } from './components/RunningScreen'
@@ -16,6 +16,8 @@ const DEFAULT_CONFIG: TimerConfig = {
   snapEnabled: false,
   snapOffset: 0,
   volume: 0.8,
+  bgTrack: 1,
+  bgVolume: 0.5,
 }
 
 function loadConfig(): TimerConfig {
@@ -36,9 +38,17 @@ function saveConfig(config: TimerConfig) {
 
 export function App() {
   const [config, setConfig] = useState<TimerConfig>(loadConfig)
-  const [appState, setAppState] = useState<AppState>('config')
+  const [appState, setAppState] = useState<AppState>(
+    () => hasTimerSession() ? 'running' : 'config'
+  )
 
-  const { mainCountdown, subCountdown, progress, start, stop } = useTimer(config)
+  const { mainCountdown, subCountdown, progress, start, stop, resumeBgAudio } = useTimer(config)
+
+  // Auto-resume timer after page refresh
+  useEffect(() => {
+    if (hasTimerSession()) start()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const { isSupported: isPipSupported, isPip, pipContainer, open: openPip, close: closePip } = usePip()
 
   const handleConfigChange = (c: TimerConfig) => {
@@ -82,6 +92,13 @@ export function App() {
           isPipSupported={isPipSupported}
           isPip={isPip}
           onPipToggle={handlePipToggle}
+          volume={config.volume}
+          onVolumeChange={v => handleConfigChange({ ...config, volume: v })}
+          bgTrack={config.bgTrack}
+          bgVolume={config.bgVolume}
+          onBgTrackChange={t => handleConfigChange({ ...config, bgTrack: t })}
+          onBgVolumeChange={v => handleConfigChange({ ...config, bgVolume: v })}
+          onResumeBgAudio={resumeBgAudio}
         />
       )}
 

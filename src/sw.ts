@@ -24,9 +24,10 @@ function showCountdown(renotify: boolean): Promise<void> {
   if (!timerMainMs) return Promise.resolve()
   const now      = Date.now()
   const nextMain = nextTick(now, timerMainMs, timerPhase)
+  const time     = new Date(nextMain).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
   return self.registration.showNotification('SlotTimer', {
     tag:      TAG,
-    body:     formatCountdown(nextMain - now),
+    body:     `Next gong at ${time}`,
     icon:     '/icon-192.png',
     badge:    '/icon-192.png',
     silent:   !renotify,
