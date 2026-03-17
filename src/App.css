@@ -1,0 +1,453 @@
+/* ── Design Tokens ─────────────────────────────────────────── */
+:root {
+  --bg:           #0b0c10;
+  --surface:      #16171e;
+  --surface-hi:   #1e1f28;
+  --accent:       #7c6ff7;
+  --accent-dim:   #3d3880;
+  --accent-glow:  rgba(124, 111, 247, 0.25);
+  --text:         #e8e8f0;
+  --text-muted:   #5a5a72;
+  --text-disabled:#2e2e3e;
+  --border:       rgba(255,255,255,0.07);
+  --radius-pill:  9999px;
+  --radius-lg:    16px;
+  --transition:   350ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Reset ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+/* ── App Shell ─────────────────────────────────────────────── */
+.app {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+}
+
+/* ── Screen transitions ────────────────────────────────────── */
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+}
+
+.screen-enter {
+  opacity: 0;
+  transform: scale(1.04);
+  pointer-events: none;
+}
+.screen-enter-active {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity var(--transition), transform var(--transition);
+}
+.screen-exit {
+  opacity: 1;
+  transform: scale(1);
+}
+.screen-exit-active {
+  opacity: 0;
+  transform: scale(0.96);
+  transition: opacity var(--transition), transform var(--transition);
+  pointer-events: none;
+}
+
+/* ── Config Screen ─────────────────────────────────────────── */
+.config-screen {
+  justify-content: flex-end;
+  padding: 0 24px env(safe-area-inset-bottom, 32px);
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 32px);
+  gap: 0;
+}
+
+.config-inner {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding-bottom: 8px;
+}
+
+.config-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.section-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* ── Pill Chips ────────────────────────────────────────────── */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  padding: 8px 16px;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast),
+              border-color var(--transition-fast), transform var(--transition-fast),
+              box-shadow var(--transition-fast);
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.chip:hover:not(:disabled) {
+  border-color: rgba(124,111,247,0.4);
+  color: var(--text);
+}
+
+.chip:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 16px var(--accent-glow);
+}
+
+.chip:disabled {
+  opacity: 0.22;
+  cursor: not-allowed;
+}
+
+/* ── Toggle ────────────────────────────────────────────────── */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.toggle-label {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.toggle {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  cursor: pointer;
+}
+
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-pill);
+  background: var(--surface-hi);
+  border: 1.5px solid var(--border);
+  transition: background var(--transition), border-color var(--transition);
+}
+
+.toggle input:checked ~ .toggle-track {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform var(--transition), background var(--transition);
+}
+
+.toggle input:checked ~ .toggle-thumb {
+  transform: translateX(18px);
+  background: #fff;
+}
+
+/* ── Snap offset row ───────────────────────────────────────── */
+.snap-offset {
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--transition);
+}
+
+.snap-offset.open {
+  grid-template-rows: 1fr;
+}
+
+.snap-offset-inner {
+  overflow: hidden;
+  padding-top: 12px;
+}
+
+/* ── Start/Stop button ─────────────────────────────────────── */
+.main-btn {
+  width: 100%;
+  padding: 18px;
+  border-radius: var(--radius-pill);
+  border: none;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast),
+              background var(--transition-fast);
+}
+
+.main-btn.start {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 4px 24px var(--accent-glow);
+}
+
+.main-btn.start:hover {
+  box-shadow: 0 6px 32px rgba(124,111,247,0.45);
+}
+
+.main-btn.start:active {
+  transform: scale(0.97);
+  box-shadow: 0 2px 12px var(--accent-glow);
+}
+
+.main-btn.stop {
+  background: var(--surface-hi);
+  color: var(--text-muted);
+  border: 1.5px solid var(--border);
+}
+
+.main-btn.stop:active {
+  transform: scale(0.97);
+}
+
+/* ── Running Screen ────────────────────────────────────────── */
+.running-screen {
+  justify-content: space-between;
+  padding: env(safe-area-inset-top, 0) 24px env(safe-area-inset-bottom, 32px);
+  padding-top: max(env(safe-area-inset-top, 0px), 0px);
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 40px);
+}
+
+.running-inner {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+}
+
+/* ── Progress Ring ─────────────────────────────────────────── */
+.ring-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ring-svg {
+  transform: rotate(-90deg);
+  overflow: visible;
+}
+
+.ring-track {
+  fill: none;
+  stroke: var(--surface-hi);
+  stroke-width: 3;
+}
+
+.ring-progress {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.15s linear;
+  filter: drop-shadow(0 0 6px var(--accent));
+}
+
+.ring-pulse {
+  animation: ringPulse 0.6s ease-out;
+}
+
+@keyframes ringPulse {
+  0%   { filter: drop-shadow(0 0 6px var(--accent)); }
+  40%  { filter: drop-shadow(0 0 22px var(--accent)) drop-shadow(0 0 40px var(--accent-glow)); }
+  100% { filter: drop-shadow(0 0 6px var(--accent)); }
+}
+
+/* ── Countdown Display ─────────────────────────────────────── */
+.countdown-wrap {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.countdown-main {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(52px, 14vw, 80px);
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  line-height: 1;
+  /* digit-change animation via CSS */
+  font-variant-numeric: tabular-nums;
+}
+
+.countdown-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.bell-icon {
+  opacity: 0.6;
+  font-size: 12px;
+}
+
+.sub-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 400;
+}
+
+/* ── Running bottom ────────────────────────────────────────── */
+.running-bottom {
+  width: 100%;
+  max-width: 420px;
+}
+
+/* ── Custom Minute Picker Modal ────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 100;
+  animation: fadeIn 200ms ease;
+}
+
+@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+
+.modal-sheet {
+  width: 100%;
+  max-width: 480px;
+  background: var(--surface);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  border: 1.5px solid var(--border);
+  border-bottom: none;
+  padding: 24px 24px max(env(safe-area-inset-bottom, 0px), 24px);
+  animation: slideUp 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@keyframes slideUp { from { transform: translateY(100%) } to { transform: translateY(0) } }
+
+.modal-title {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.modal-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.modal-input {
+  flex: 1;
+  background: var(--surface-hi);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 32px;
+  font-weight: 300;
+  padding: 12px 16px;
+  outline: none;
+  text-align: center;
+  -moz-appearance: textfield;
+  appearance: textfield;
+  transition: border-color var(--transition-fast);
+}
+.modal-input::-webkit-outer-spin-button,
+.modal-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.modal-input:focus { border-color: var(--accent); }
+
+.modal-unit {
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.modal-confirm {
+  padding: 14px;
+  border-radius: var(--radius-pill);
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+  box-shadow: 0 4px 20px var(--accent-glow);
+}
+.modal-confirm:active { transform: scale(0.96); }
