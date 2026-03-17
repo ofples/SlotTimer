@@ -41,8 +41,8 @@ export function usePip(): UsePipReturn {
     pipWinRef.current?.close()
 
     const pipWin = await window.documentPictureInPicture.requestWindow({
-      width: 220,
-      height: 210,
+      width: 180,
+      height: 80,
       disallowReturnToOpener: false,
     })
 

@@ -88,9 +88,7 @@ export function App() {
       {pipContainer && createPortal(
         <PipContent
           mainCountdown={mainCountdown}
-          subCountdown={subCountdown}
-          progress={progress}
-          onStop={handleStop}
+          onClose={closePip}
         />,
         pipContainer
       )}

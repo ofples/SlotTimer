@@ -551,25 +551,15 @@ body {
   width: 100%;
   height: 100%;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 12px 14px;
-  background: var(--bg);
-}
-
-.pip-ring-wrap {
-  flex: 1;
-  position: relative;
-  display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
+  background: var(--bg);
+  position: relative;
 }
 
 .pip-main {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 300;
   letter-spacing: -0.02em;
   color: var(--text);
@@ -577,37 +567,27 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.pip-countdown-wrap {
+.pip-close {
   position: absolute;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-
-.pip-stop {
-  width: 100%;
-  padding: 10px;
-  border-radius: var(--radius-pill);
-  border: 1.5px solid var(--border);
-  background: var(--surface-hi);
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
   color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   outline: none;
-  transition: background var(--transition-fast), color var(--transition-fast);
+  transition: color var(--transition-fast), background var(--transition-fast);
   -webkit-tap-highlight-color: transparent;
-  flex-shrink: 0;
 }
 
-.pip-stop:hover {
-  background: var(--surface);
+.pip-close:hover {
   color: var(--text);
-}
-
-.pip-stop:active {
-  transform: scale(0.96);
+  background: var(--surface-hi);
 }
