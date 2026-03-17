@@ -14,6 +14,8 @@ interface UseTimerReturn extends TimerState {
   stop: () => void
 }
 
+// ── Audio ──────────────────────────────────────────────────────
+
 function loadAudio(src: string): HTMLAudioElement | null {
   try {
     const a = new Audio(src)
@@ -30,38 +32,78 @@ function playSound(audio: HTMLAudioElement | null) {
   audio.play().catch(() => { /* sound file may not exist yet */ })
 }
 
+// ── Wake Lock ──────────────────────────────────────────────────
+
+async function acquireWakeLock(ref: React.MutableRefObject<WakeLockSentinel | null>) {
+  if (!('wakeLock' in navigator)) return
+  try {
+    ref.current = await navigator.wakeLock.request('screen')
+  } catch {
+    // Permission denied or not supported — not critical
+  }
+}
+
+function releaseWakeLock(ref: React.MutableRefObject<WakeLockSentinel | null>) {
+  ref.current?.release().catch(() => {})
+  ref.current = null
+}
+
+// ── Service Worker messaging ───────────────────────────────────
+
+function postToSW(data: object) {
+  navigator.serviceWorker?.controller?.postMessage(data)
+}
+
+async function ensureNotificationPermission(): Promise<boolean> {
+  if (!('Notification' in window)) return false
+  if (Notification.permission === 'granted') return true
+  if (Notification.permission === 'denied') return false
+  const result = await Notification.requestPermission()
+  return result === 'granted'
+}
+
+// ── Hook ───────────────────────────────────────────────────────
+
 export function useTimer(config: TimerConfig): UseTimerReturn {
   const [isRunning, setIsRunning] = useState(false)
-  const [state, setState] = useState<TimerState>({ mainCountdown: '--:--', subCountdown: '--:--', progress: 0 })
+  const [state, setState] = useState<TimerState>({
+    mainCountdown: '--:--',
+    subCountdown: '--:--',
+    progress: 0,
+  })
 
-  const phaseRef = useRef(0)
+  const phaseRef          = useRef(0)
   const mainIntervalMsRef = useRef(0)
-  const subIntervalMsRef = useRef(0)
-  const tickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const rafRef = useRef<number | null>(null)
-  const isRunningRef = useRef(false)
-  const gongRef = useRef<HTMLAudioElement | null>(null)
-  const bellRef = useRef<HTMLAudioElement | null>(null)
+  const subIntervalMsRef  = useRef(0)
+  const tickTimerRef      = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const notifTimerRef     = useRef<ReturnType<typeof setInterval> | null>(null)
+  const rafRef            = useRef<number | null>(null)
+  const isRunningRef      = useRef(false)
+  const gongRef           = useRef<HTMLAudioElement | null>(null)
+  const bellRef           = useRef<HTMLAudioElement | null>(null)
+  const wakeLockRef       = useRef<WakeLockSentinel | null>(null)
+  const notifGrantedRef   = useRef(false)
 
-  // Load audio on mount
+  // Preload audio on mount
   useEffect(() => {
     gongRef.current = loadAudio('/sounds/gong.mp3')
     bellRef.current = loadAudio('/sounds/bell.mp3')
   }, [])
 
-  const updateDisplay = useCallback(() => {
-    const now = Date.now()
-    const mainMs = mainIntervalMsRef.current
-    const subMs = subIntervalMsRef.current
-    const phase = phaseRef.current
+  // ── Display update (RAF loop) ────────────────────────────────
 
+  const updateDisplay = useCallback(() => {
+    const now      = Date.now()
+    const mainMs   = mainIntervalMsRef.current
+    const subMs    = subIntervalMsRef.current
+    const phase    = phaseRef.current
     const nextMain = nextTick(now, mainMs, phase)
-    const nextSub = nextSubTick(now, mainMs, subMs, phase)
-    const prog = mainProgress(now, mainMs, phase)
+    const nextSub  = nextSubTick(now, mainMs, subMs, phase)
+    const prog     = mainProgress(now, mainMs, phase)
 
     setState({
       mainCountdown: formatCountdown(nextMain - now),
-      subCountdown: formatCountdown(nextSub - now),
+      subCountdown:  formatCountdown(nextSub  - now),
       progress: prog,
     })
   }, [])
@@ -72,85 +114,126 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
     rafRef.current = requestAnimationFrame(rafLoop)
   }, [updateDisplay])
 
+  // ── Notification helper ──────────────────────────────────────
+
+  const sendNotification = useCallback((renotify: boolean, kind?: 'main' | 'sub') => {
+    if (!notifGrantedRef.current) return
+    const now      = Date.now()
+    const mainMs   = mainIntervalMsRef.current
+    const subMs    = subIntervalMsRef.current
+    const phase    = phaseRef.current
+    const nextMain = nextTick(now, mainMs, phase)
+    const nextSub  = nextSubTick(now, mainMs, subMs, phase)
+
+    postToSW({
+      type: 'UPDATE_NOTIFICATION',
+      mainCountdown: formatCountdown(nextMain - now),
+      subCountdown:  formatCountdown(nextSub  - now),
+      renotify,
+      kind,
+    })
+  }, [])
+
+  // ── Tick scheduler ───────────────────────────────────────────
+
   const scheduleNextTick = useCallback(() => {
     if (!isRunningRef.current) return
-    const now = Date.now()
+    const now    = Date.now()
     const mainMs = mainIntervalMsRef.current
-    const subMs = subIntervalMsRef.current
-    const phase = phaseRef.current
+    const subMs  = subIntervalMsRef.current
+    const phase  = phaseRef.current
 
     const nextMain = nextTick(now, mainMs, phase)
-    const nextSub = nextSubTick(now, mainMs, subMs, phase)
+    const nextSub  = nextSubTick(now, mainMs, subMs, phase)
     const nextFire = Math.min(nextMain, nextSub)
-    const delay = Math.max(0, nextFire - Date.now())
+    const delay    = Math.max(0, nextFire - Date.now())
 
     tickTimerRef.current = setTimeout(() => {
       if (!isRunningRef.current) return
       const fireTime = Date.now()
-      const mainMs2 = mainIntervalMsRef.current
-      const subMs2 = subIntervalMsRef.current
-      const phase2 = phaseRef.current
 
-      // Check what fired (within 500ms tolerance)
-      const wasMain = Math.abs(fireTime - nextTick(fireTime - 1, mainMs2, phase2)) < 500
-        || Math.abs(nextMain - fireTime) < 500
-      const wasSub = Math.abs(fireTime - nextSubTick(fireTime - 1, mainMs2, subMs2, phase2)) < 500
-        || Math.abs(nextSub - fireTime) < 500
+      // Determine what fired (within 1s tolerance)
+      const firedMain = Math.abs(fireTime - nextMain) < 1000
+      const firedSub  = !firedMain && Math.abs(fireTime - nextSub) < 1000
 
-      if (wasMain) playSound(gongRef.current)
-      else if (wasSub) playSound(bellRef.current)
+      if (firedMain) {
+        playSound(gongRef.current)
+        sendNotification(true, 'main')
+      } else if (firedSub) {
+        playSound(bellRef.current)
+        sendNotification(true, 'sub')
+      }
 
       scheduleNextTick()
     }, delay)
-  }, [])
+  }, [sendNotification])
 
-  // Re-sync when tab becomes visible again
+  // ── Visibility re-sync ───────────────────────────────────────
+
   useEffect(() => {
-    const handleVisibility = () => {
+    const handleVisibility = async () => {
       if (document.visibilityState === 'visible' && isRunningRef.current) {
         if (tickTimerRef.current) clearTimeout(tickTimerRef.current)
         scheduleNextTick()
         updateDisplay()
+        // Re-acquire wake lock (it auto-releases when backgrounded)
+        await acquireWakeLock(wakeLockRef)
       }
     }
     document.addEventListener('visibilitychange', handleVisibility)
     return () => document.removeEventListener('visibilitychange', handleVisibility)
   }, [scheduleNextTick, updateDisplay])
 
-  const start = useCallback(() => {
-    const now = Date.now()
+  // ── Start / Stop ─────────────────────────────────────────────
+
+  const start = useCallback(async () => {
+    const now    = Date.now()
     const mainMs = config.mainInterval * 60_000
-    const subMs = config.subInterval * 60_000
+    const subMs  = config.subInterval  * 60_000
 
     mainIntervalMsRef.current = mainMs
-    subIntervalMsRef.current = subMs
-
-    if (config.snapEnabled) {
-      phaseRef.current = config.snapOffset * 60_000
-    } else {
-      // Phase anchored to "now" so first tick is exactly one interval away
-      phaseRef.current = now % mainMs
-    }
+    subIntervalMsRef.current  = subMs
+    phaseRef.current = config.snapEnabled
+      ? config.snapOffset * 60_000
+      : now % mainMs
 
     isRunningRef.current = true
     setIsRunning(true)
     updateDisplay()
     scheduleNextTick()
     rafRef.current = requestAnimationFrame(rafLoop)
-  }, [config, updateDisplay, scheduleNextTick, rafLoop])
+
+    // Wake lock — keep screen on
+    await acquireWakeLock(wakeLockRef)
+
+    // Notification permission + initial notification
+    notifGrantedRef.current = await ensureNotificationPermission()
+    if (notifGrantedRef.current) {
+      sendNotification(false)
+      // Refresh notification every 60s so countdown stays roughly accurate
+      notifTimerRef.current = setInterval(() => sendNotification(false), 60_000)
+    }
+  }, [config, updateDisplay, scheduleNextTick, rafLoop, sendNotification])
 
   const stop = useCallback(() => {
     isRunningRef.current = false
     setIsRunning(false)
-    if (tickTimerRef.current) { clearTimeout(tickTimerRef.current); tickTimerRef.current = null }
-    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
+
+    if (tickTimerRef.current)  { clearTimeout(tickTimerRef.current);   tickTimerRef.current  = null }
+    if (notifTimerRef.current) { clearInterval(notifTimerRef.current); notifTimerRef.current = null }
+    if (rafRef.current)        { cancelAnimationFrame(rafRef.current); rafRef.current        = null }
+
+    releaseWakeLock(wakeLockRef)
+    postToSW({ type: 'CLEAR_NOTIFICATION' })
     setState({ mainCountdown: '--:--', subCountdown: '--:--', progress: 0 })
   }, [])
 
   // Cleanup on unmount
   useEffect(() => () => {
-    if (tickTimerRef.current) clearTimeout(tickTimerRef.current)
-    if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    if (tickTimerRef.current)  clearTimeout(tickTimerRef.current)
+    if (notifTimerRef.current) clearInterval(notifTimerRef.current)
+    if (rafRef.current)        cancelAnimationFrame(rafRef.current)
+    releaseWakeLock(wakeLockRef)
   }, [])
 
   return { ...state, isRunning, start, stop }
