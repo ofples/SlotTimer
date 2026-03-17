@@ -35,34 +35,59 @@ function playSound(audio: HTMLAudioElement | null, volume: number) {
 
 // ── Silent audio keep-alive ────────────────────────────────────
 //
-// Chrome throttles setTimeout on backgrounded tabs, which causes bells to
-// fire late or not at all. Playing inaudible audio exempts the page from
-// background throttling. We create a looping near-silent Web Audio source
-// so no extra file is needed and no audible sound is produced.
+// Chrome/Android throttle setTimeout on backgrounded tabs, which causes bells
+// to fire late or not at all.  Playing audio via an HTMLAudioElement exempts
+// the page from background throttling AND activates the MediaSession API so
+// that lock-screen / notification-shade controls appear on Android.
+//
+// An AudioContext alone does NOT trigger MediaSession on Android — a real
+// HTMLAudioElement is required.  We generate a tiny silent WAV as a data URL
+// at runtime so no extra audio file is needed.
 
-function startSilentAudio(ref: React.MutableRefObject<AudioContext | null>) {
+function makeSilentWavUrl(): string {
+  // 0.5 s of silence: 8 kHz, 16-bit mono PCM (~8 KB WAV)
+  const sampleRate = 8_000
+  const numSamples = sampleRate / 2          // 0.5 seconds
+  const dataSize   = numSamples * 2          // 16-bit = 2 bytes/sample
+  const buf        = new ArrayBuffer(44 + dataSize)
+  const v          = new DataView(buf)
+  const w = (o: number, s: string) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)) }
+  w(0, 'RIFF'); v.setUint32(4, 36 + dataSize, true)
+  w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true)
+  v.setUint16(20, 1, true)               // PCM
+  v.setUint16(22, 1, true)               // mono
+  v.setUint32(24, sampleRate, true)
+  v.setUint32(28, sampleRate * 2, true)  // byte rate
+  v.setUint16(32, 2, true)               // block align
+  v.setUint16(34, 16, true)              // bits per sample
+  w(36, 'data'); v.setUint32(40, dataSize, true)
+  // PCM data bytes default to 0 (silence)
+  const bytes = new Uint8Array(buf)
+  let bin = ''
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i])
+  return 'data:audio/wav;base64,' + btoa(bin)
+}
+
+function startSilentAudio(ref: React.MutableRefObject<HTMLAudioElement | null>) {
   if (ref.current) return
   try {
-    const ctx = new AudioContext()
-    // 1-second buffer of near-silence (0.001 amplitude avoids pure-silence
-    // optimisations that some browsers apply to muted contexts)
-    const buf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate)
-    const data = buf.getChannelData(0)
-    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.001
-    const src = ctx.createBufferSource()
-    src.buffer = buf
-    src.loop = true
-    src.connect(ctx.destination)
-    src.start()
-    ref.current = ctx
+    const audio = new Audio(makeSilentWavUrl())
+    audio.loop   = true
+    audio.volume = 0.001  // inaudible but not muted — muted elements don't
+                          // activate MediaSession on Android
+    audio.play().catch(() => {})
+    ref.current = audio
   } catch {
-    // AudioContext not available — not critical
+    // Not available in this environment — not critical
   }
 }
 
-function stopSilentAudio(ref: React.MutableRefObject<AudioContext | null>) {
-  ref.current?.close().catch(() => {})
-  ref.current = null
+function stopSilentAudio(ref: React.MutableRefObject<HTMLAudioElement | null>) {
+  if (ref.current) {
+    ref.current.pause()
+    ref.current.src = ''
+    ref.current = null
+  }
 }
 
 // ── Wake Lock ──────────────────────────────────────────────────
@@ -115,7 +140,7 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
   const bellRef           = useRef<HTMLAudioElement | null>(null)
   const wakeLockRef       = useRef<WakeLockSentinel | null>(null)
   const notifGrantedRef   = useRef(false)
-  const silentAudioRef    = useRef<AudioContext | null>(null)
+  const silentAudioRef    = useRef<HTMLAudioElement | null>(null)
 
   // Preload audio on mount
   useEffect(() => {
