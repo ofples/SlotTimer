@@ -77,7 +77,6 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
   const mainIntervalMsRef = useRef(0)
   const subIntervalMsRef  = useRef(0)
   const tickTimerRef      = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const notifTimerRef     = useRef<ReturnType<typeof setInterval> | null>(null)
   const rafRef            = useRef<number | null>(null)
   const isRunningRef      = useRef(false)
   const gongRef           = useRef<HTMLAudioElement | null>(null)
@@ -117,22 +116,9 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
 
   // ── Notification helper ──────────────────────────────────────
 
-  const sendNotification = useCallback((renotify: boolean, kind?: 'main' | 'sub') => {
+  const fireNotification = useCallback(() => {
     if (!notifGrantedRef.current) return
-    const now      = Date.now()
-    const mainMs   = mainIntervalMsRef.current
-    const subMs    = subIntervalMsRef.current
-    const phase    = phaseRef.current
-    const nextMain = nextTick(now, mainMs, phase)
-    const nextSub  = nextSubTick(now, mainMs, subMs, phase)
-
-    postToSW({
-      type: 'UPDATE_NOTIFICATION',
-      mainCountdown: formatCountdown(nextMain - now),
-      subCountdown:  formatCountdown(nextSub  - now),
-      renotify,
-      kind,
-    })
+    postToSW({ type: 'FIRE_NOTIFICATION' })
   }, [])
 
   // ── Tick scheduler ───────────────────────────────────────────
@@ -159,15 +145,14 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
 
       if (firedMain) {
         playSound(gongRef.current, config.volume)
-        sendNotification(true, 'main')
+        fireNotification()
       } else if (firedSub) {
         playSound(bellRef.current, config.volume)
-        sendNotification(true, 'sub')
       }
 
       scheduleNextTick()
     }, delay)
-  }, [sendNotification])
+  }, [fireNotification])
 
   // ── Visibility re-sync ───────────────────────────────────────
 
@@ -207,21 +192,18 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
     // Wake lock — keep screen on
     await acquireWakeLock(wakeLockRef)
 
-    // Notification permission + initial notification
+    // Notification permission — delegate all scheduling to the SW
     notifGrantedRef.current = await ensureNotificationPermission()
     if (notifGrantedRef.current) {
-      sendNotification(false)
-      // Refresh notification every 60s so countdown stays roughly accurate
-      notifTimerRef.current = setInterval(() => sendNotification(false), 60_000)
+      postToSW({ type: 'START_TIMER', mainMs, phase: phaseRef.current })
     }
-  }, [config, updateDisplay, scheduleNextTick, rafLoop, sendNotification])
+  }, [config, updateDisplay, scheduleNextTick, rafLoop])
 
   const stop = useCallback(() => {
     isRunningRef.current = false
     setIsRunning(false)
 
     if (tickTimerRef.current)  { clearTimeout(tickTimerRef.current);   tickTimerRef.current  = null }
-    if (notifTimerRef.current) { clearInterval(notifTimerRef.current); notifTimerRef.current = null }
     if (rafRef.current)        { cancelAnimationFrame(rafRef.current); rafRef.current        = null }
 
     releaseWakeLock(wakeLockRef)
@@ -232,7 +214,6 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
   // Cleanup on unmount
   useEffect(() => () => {
     if (tickTimerRef.current)  clearTimeout(tickTimerRef.current)
-    if (notifTimerRef.current) clearInterval(notifTimerRef.current)
     if (rafRef.current)        cancelAnimationFrame(rafRef.current)
     releaseWakeLock(wakeLockRef)
   }, [])
