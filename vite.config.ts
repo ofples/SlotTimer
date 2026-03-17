@@ -31,8 +31,7 @@ export default defineConfig({
         ]
       },
       injectManifest: {
-        globPatterns: ['**/*.{js,css,html,png,mp3}'],
-        maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 10 MiB
+        globPatterns: ['**/*.{js,css,html,png}'], // mp3s cached at runtime, not precached
       }
     })
   ]
