@@ -15,6 +15,7 @@ interface Props {
   bgVolume: number
   onBgTrackChange: (t: 1 | 2 | 3) => void
   onBgVolumeChange: (v: number) => void
+  onResumeBgAudio: () => void
 }
 
 // Fixed SVG coordinate space; scales via CSS width/height
@@ -35,6 +36,7 @@ export function RunningScreen({
   isPipSupported, isPip, onPipToggle,
   volume, onVolumeChange,
   bgTrack, bgVolume, onBgTrackChange, onBgVolumeChange,
+  onResumeBgAudio,
 }: Props) {
   const [pulse, setPulse] = useState(false)
   const [openPanel, setOpenPanel] = useState<'track' | 'volume' | 'bell' | null>(null)
@@ -63,6 +65,7 @@ export function RunningScreen({
     <div
       className={`screen running-screen${visible ? '' : ' screen-exit-active'}`}
       aria-hidden={!visible}
+      onPointerDown={onResumeBgAudio}
     >
       {isPipSupported && (
         <button

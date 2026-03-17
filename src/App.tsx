@@ -42,7 +42,7 @@ export function App() {
     () => hasTimerSession() ? 'running' : 'config'
   )
 
-  const { mainCountdown, subCountdown, progress, start, stop } = useTimer(config)
+  const { mainCountdown, subCountdown, progress, start, stop, resumeBgAudio } = useTimer(config)
 
   // Auto-resume timer after page refresh
   useEffect(() => {
@@ -98,6 +98,7 @@ export function App() {
           bgVolume={config.bgVolume}
           onBgTrackChange={t => handleConfigChange({ ...config, bgTrack: t })}
           onBgVolumeChange={v => handleConfigChange({ ...config, bgVolume: v })}
+          onResumeBgAudio={resumeBgAudio}
         />
       )}
 

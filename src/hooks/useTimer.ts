@@ -43,6 +43,7 @@ interface UseTimerReturn extends TimerState {
   isRunning: boolean
   start: () => void
   stop: () => void
+  resumeBgAudio: () => void
 }
 
 // ── Audio ──────────────────────────────────────────────────────
@@ -86,13 +87,7 @@ function startBgAudio(
     const audio  = new Audio(`/sounds/bg${track}.mp3`)
     audio.loop   = true
     audio.volume = Math.max(0.01, volume)
-    audio.play().catch(() => {
-      // Autoplay blocked (e.g. page restored without user gesture).
-      // Retry on the first interaction — once plays, remove the listener.
-      const resume = () => { audio.play().catch(() => {}) }
-      document.addEventListener('pointerdown', resume, { once: true })
-      document.addEventListener('keydown',     resume, { once: true })
-    })
+    audio.play().catch(() => { /* blocked — caller should retry via resumeBgAudio */ })
     ref.current  = audio
   } catch (e) {
     console.warn('[SlotTimer] bg audio setup failed:', e)
@@ -361,5 +356,12 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
     stopBgAudio(silentAudioRef)
   }, [])
 
-  return { ...state, isRunning, start, stop }
+  // Called from any user interaction on the running screen to unblock autoplay
+  // when the timer was auto-restored after a page refresh.
+  const resumeBgAudio = useCallback(() => {
+    const audio = silentAudioRef.current
+    if (audio?.paused) audio.play().catch(() => {})
+  }, [])
+
+  return { ...state, isRunning, start, stop, resumeBgAudio }
 }
