@@ -210,11 +210,13 @@ body {
   overflow: hidden;
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows var(--transition);
+  opacity: 0;
+  transition: grid-template-rows var(--transition), opacity var(--transition);
 }
 
 .snap-offset.open {
   grid-template-rows: 1fr;
+  opacity: 1;
 }
 
 .snap-offset-inner {
@@ -450,6 +452,58 @@ body {
   box-shadow: 0 4px 20px var(--accent-glow);
 }
 .modal-confirm:active { transform: scale(0.96); }
+
+/* ── Volume Slider ─────────────────────────────────────────── */
+.volume-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.volume-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.volume-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--surface-hi);
+  outline: none;
+  cursor: pointer;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  box-shadow: 0 0 6px var(--accent-glow);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.volume-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent);
+  cursor: pointer;
+  box-shadow: 0 0 6px var(--accent-glow);
+}
+
+.volume-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
 
 /* ── Picture-in-Picture ────────────────────────────────────── */
 

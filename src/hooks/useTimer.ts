@@ -26,8 +26,9 @@ function loadAudio(src: string): HTMLAudioElement | null {
   }
 }
 
-function playSound(audio: HTMLAudioElement | null) {
+function playSound(audio: HTMLAudioElement | null, volume: number) {
   if (!audio) return
+  audio.volume = Math.max(0, Math.min(1, volume))
   audio.currentTime = 0
   audio.play().catch(() => { /* sound file may not exist yet */ })
 }
@@ -157,10 +158,10 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
       const firedSub  = !firedMain && Math.abs(fireTime - nextSub) < 1000
 
       if (firedMain) {
-        playSound(gongRef.current)
+        playSound(gongRef.current, config.volume)
         sendNotification(true, 'main')
       } else if (firedSub) {
-        playSound(bellRef.current)
+        playSound(bellRef.current, config.volume)
         sendNotification(true, 'sub')
       }
 

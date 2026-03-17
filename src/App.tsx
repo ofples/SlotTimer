@@ -8,19 +8,43 @@ import { ConfigScreen } from './components/ConfigScreen'
 import { RunningScreen } from './components/RunningScreen'
 import { PipContent } from './components/PipContent'
 
+const STORAGE_KEY = 'slottimer-config'
+
 const DEFAULT_CONFIG: TimerConfig = {
   mainInterval: 30,
   subInterval: 5,
   snapEnabled: false,
   snapOffset: 0,
+  volume: 0.8,
+}
+
+function loadConfig(): TimerConfig {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return DEFAULT_CONFIG
+    return { ...DEFAULT_CONFIG, ...JSON.parse(raw) }
+  } catch {
+    return DEFAULT_CONFIG
+  }
+}
+
+function saveConfig(config: TimerConfig) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(config))
+  } catch { /* storage unavailable */ }
 }
 
 export function App() {
-  const [config, setConfig] = useState<TimerConfig>(DEFAULT_CONFIG)
+  const [config, setConfig] = useState<TimerConfig>(loadConfig)
   const [appState, setAppState] = useState<AppState>('config')
 
   const { mainCountdown, subCountdown, progress, start, stop } = useTimer(config)
   const { isSupported: isPipSupported, isPip, pipContainer, open: openPip, close: closePip } = usePip()
+
+  const handleConfigChange = (c: TimerConfig) => {
+    setConfig(c)
+    saveConfig(c)
+  }
 
   const handleStart = () => {
     start()
@@ -43,7 +67,7 @@ export function App() {
       {appState === 'config' && (
         <ConfigScreen
           config={config}
-          onChange={setConfig}
+          onChange={handleConfigChange}
           onStart={handleStart}
           visible
         />
@@ -61,7 +85,6 @@ export function App() {
         />
       )}
 
-      {/* PiP portal — renders into the floating window's DOM when active */}
       {pipContainer && createPortal(
         <PipContent
           mainCountdown={mainCountdown}
