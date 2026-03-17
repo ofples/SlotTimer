@@ -6,6 +6,9 @@ interface Props {
   progress: number      // 0–1
   onStop: () => void
   visible: boolean
+  isPipSupported: boolean
+  isPip: boolean
+  onPipToggle: () => void
 }
 
 // Fixed SVG coordinate space; scales via CSS width/height
@@ -15,7 +18,10 @@ const CY = VIEW / 2
 const R = 130
 const CIRC = 2 * Math.PI * R
 
-export function RunningScreen({ mainCountdown, subCountdown, progress, onStop, visible }: Props) {
+export function RunningScreen({
+  mainCountdown, subCountdown, progress, onStop, visible,
+  isPipSupported, isPip, onPipToggle,
+}: Props) {
   const [pulse, setPulse] = useState(false)
   const prevCountdownRef = useRef(mainCountdown)
 
@@ -40,6 +46,17 @@ export function RunningScreen({ mainCountdown, subCountdown, progress, onStop, v
       className={`screen running-screen${visible ? '' : ' screen-exit-active'}`}
       aria-hidden={!visible}
     >
+      {isPipSupported && (
+        <button
+          className={`pip-btn${isPip ? ' active' : ''}`}
+          onClick={onPipToggle}
+          title={isPip ? 'Close mini player' : 'Open mini player'}
+          aria-label={isPip ? 'Close mini player' : 'Open mini player'}
+        >
+          <PipIcon active={isPip} />
+        </button>
+      )}
+
       <div className="running-inner">
         <div className="ring-wrap">
           <svg
@@ -74,6 +91,21 @@ export function RunningScreen({ mainCountdown, subCountdown, progress, onStop, v
         </button>
       </div>
     </div>
+  )
+}
+
+function PipIcon({ active }: { active: boolean }) {
+  // Standard PiP icon: large rect + small overlapping rect in corner
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+      <rect x="1" y="3" width="16" height="12" rx="2"
+        stroke="currentColor" strokeWidth="1.5" fill="none"
+        opacity={active ? 0.4 : 1}
+      />
+      <rect x="9" y="8" width="7" height="5" rx="1"
+        fill="currentColor"
+      />
+    </svg>
   )
 }
 
