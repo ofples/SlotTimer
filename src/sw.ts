@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import { precacheAndRoute } from 'workbox-precaching'
+import { nextTick, formatCountdown } from './lib/snapLogic'
 
 declare const self: ServiceWorkerGlobalScope
 
@@ -7,25 +8,49 @@ precacheAndRoute(self.__WB_MANIFEST)
 
 const TAG = 'slottimer'
 
-interface UpdateMsg {
-  type: 'UPDATE_NOTIFICATION'
-  mainCountdown: string   // "MM:SS"
-  subCountdown: string
-  renotify: boolean       // true when a gong/bell just fired
-  kind?: 'main' | 'sub'  // which interval fired (if renotify)
+// Timer state owned by the SW
+let timerMainMs = 0
+let timerPhase  = 0
+let minuteTimer: ReturnType<typeof setTimeout> | null = null
+
+function showCountdown(renotify: boolean): Promise<void> {
+  const now      = Date.now()
+  const nextMain = nextTick(now, timerMainMs, timerPhase)
+  return self.registration.showNotification('SlotTimer', {
+    tag:      TAG,
+    body:     formatCountdown(nextMain - now),
+    icon:     '/icon-192.png',
+    badge:    '/icon-192.png',
+    silent:   !renotify,
+    renotify,
+  })
 }
 
-interface ClearMsg {
-  type: 'CLEAR_NOTIFICATION'
-}
+function scheduleNextMinuteBoundary() {
+  if (minuteTimer) clearTimeout(minuteTimer)
+  if (!timerMainMs) return
 
-type Msg = UpdateMsg | ClearMsg
+  const now      = Date.now()
+  const nextMain = nextTick(now, timerMainMs, timerPhase)
+  const remaining   = nextMain - now
+  const msIntoMinute = remaining % 60_000
+  const delay        = msIntoMinute === 0 ? 60_000 : msIntoMinute
+
+  minuteTimer = setTimeout(() => {
+    if (!timerMainMs) return
+    showCountdown(false)
+    scheduleNextMinuteBoundary()
+  }, delay)
+}
 
 self.addEventListener('message', (event: ExtendableMessageEvent) => {
-  const data = event.data as Msg
+  const data = event.data as { type: string; mainMs?: number; phase?: number }
   if (!data?.type) return
 
   if (data.type === 'CLEAR_NOTIFICATION') {
+    timerMainMs = 0
+    timerPhase  = 0
+    if (minuteTimer) { clearTimeout(minuteTimer); minuteTimer = null }
     event.waitUntil(
       self.registration.getNotifications({ tag: TAG }).then(notifs =>
         Promise.all(notifs.map(n => { n.close(); return Promise.resolve() }))
@@ -34,30 +59,16 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
     return
   }
 
-  if (data.type === 'UPDATE_NOTIFICATION') {
-    const { mainCountdown, subCountdown, renotify, kind } = data
+  if (data.type === 'START_TIMER') {
+    timerMainMs = data.mainMs!
+    timerPhase  = data.phase!
+    event.waitUntil(showCountdown(false))
+    scheduleNextMinuteBoundary()
+    return
+  }
 
-    let title = 'SlotTimer'
-    let body = `Next gong  ${mainCountdown}   ·   Bell  ${subCountdown}`
-
-    if (renotify && kind === 'main') {
-      title = '🔔 Gong'
-      body = `Next gong  ${mainCountdown}   ·   Bell  ${subCountdown}`
-    } else if (renotify && kind === 'sub') {
-      title = '🔔 Bell'
-      body = `Next gong  ${mainCountdown}   ·   Bell  ${subCountdown}`
-    }
-
-    event.waitUntil(
-      self.registration.showNotification(title, {
-        tag: TAG,
-        body,
-        icon: '/icon-192.png',
-        badge: '/icon-192.png',
-        silent: !renotify,
-        renotify,
-      })
-    )
+  if (data.type === 'FIRE_NOTIFICATION') {
+    event.waitUntil(showCountdown(true))
   }
 })
 
