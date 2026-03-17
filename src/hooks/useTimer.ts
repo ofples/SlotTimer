@@ -151,7 +151,13 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
 
   const fireNotification = useCallback(() => {
     if (!notifGrantedRef.current) return
-    postToSW({ type: 'FIRE_NOTIFICATION' })
+    // Pass current timer state so the SW can self-heal if it was terminated
+    // and lost its module-level timerMainMs/timerPhase.
+    postToSW({
+      type:   'FIRE_NOTIFICATION',
+      mainMs: mainIntervalMsRef.current,
+      phase:  phaseRef.current,
+    })
   }, [])
 
   // ── Tick scheduler ───────────────────────────────────────────
@@ -197,6 +203,14 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
         updateDisplay()
         // Re-acquire wake lock (it auto-releases when backgrounded)
         await acquireWakeLock(wakeLockRef)
+        // Re-sync SW in case it was terminated while the page was backgrounded
+        if (notifGrantedRef.current) {
+          postToSW({
+            type:   'START_TIMER',
+            mainMs: mainIntervalMsRef.current,
+            phase:  phaseRef.current,
+          })
+        }
       }
     }
     document.addEventListener('visibilitychange', handleVisibility)
