@@ -33,6 +33,38 @@ function playSound(audio: HTMLAudioElement | null, volume: number) {
   audio.play().catch(() => { /* sound file may not exist yet */ })
 }
 
+// ── Silent audio keep-alive ────────────────────────────────────
+//
+// Chrome throttles setTimeout on backgrounded tabs, which causes bells to
+// fire late or not at all. Playing inaudible audio exempts the page from
+// background throttling. We create a looping near-silent Web Audio source
+// so no extra file is needed and no audible sound is produced.
+
+function startSilentAudio(ref: React.MutableRefObject<AudioContext | null>) {
+  if (ref.current) return
+  try {
+    const ctx = new AudioContext()
+    // 1-second buffer of near-silence (0.001 amplitude avoids pure-silence
+    // optimisations that some browsers apply to muted contexts)
+    const buf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate)
+    const data = buf.getChannelData(0)
+    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.001
+    const src = ctx.createBufferSource()
+    src.buffer = buf
+    src.loop = true
+    src.connect(ctx.destination)
+    src.start()
+    ref.current = ctx
+  } catch {
+    // AudioContext not available — not critical
+  }
+}
+
+function stopSilentAudio(ref: React.MutableRefObject<AudioContext | null>) {
+  ref.current?.close().catch(() => {})
+  ref.current = null
+}
+
 // ── Wake Lock ──────────────────────────────────────────────────
 
 async function acquireWakeLock(ref: React.MutableRefObject<WakeLockSentinel | null>) {
@@ -83,6 +115,7 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
   const bellRef           = useRef<HTMLAudioElement | null>(null)
   const wakeLockRef       = useRef<WakeLockSentinel | null>(null)
   const notifGrantedRef   = useRef(false)
+  const silentAudioRef    = useRef<AudioContext | null>(null)
 
   // Preload audio on mount
   useEffect(() => {
@@ -189,6 +222,19 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
     scheduleNextTick()
     rafRef.current = requestAnimationFrame(rafLoop)
 
+    // Silent audio loop — prevents Chrome from throttling JS timers in background
+    startSilentAudio(silentAudioRef)
+
+    // MediaSession — labels the audio source on the lock screen / notification shade
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: 'SlotTimer',
+        artist: `Every ${config.mainInterval} min`,
+      })
+      navigator.mediaSession.setActionHandler('stop', stop)
+      navigator.mediaSession.setActionHandler('pause', stop)
+    }
+
     // Wake lock — keep screen on
     await acquireWakeLock(wakeLockRef)
 
@@ -206,6 +252,8 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
     if (tickTimerRef.current)  { clearTimeout(tickTimerRef.current);   tickTimerRef.current  = null }
     if (rafRef.current)        { cancelAnimationFrame(rafRef.current); rafRef.current        = null }
 
+    stopSilentAudio(silentAudioRef)
+    if ('mediaSession' in navigator) navigator.mediaSession.metadata = null
     releaseWakeLock(wakeLockRef)
     postToSW({ type: 'CLEAR_NOTIFICATION' })
     setState({ mainCountdown: '--:--', subCountdown: '--:--', progress: 0 })
@@ -216,6 +264,7 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
     if (tickTimerRef.current)  clearTimeout(tickTimerRef.current)
     if (rafRef.current)        cancelAnimationFrame(rafRef.current)
     releaseWakeLock(wakeLockRef)
+    stopSilentAudio(silentAudioRef)
   }, [])
 
   return { ...state, isRunning, start, stop }
