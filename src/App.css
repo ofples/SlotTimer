@@ -77,9 +77,8 @@ body {
 
 /* ── Config Screen ─────────────────────────────────────────── */
 .config-screen {
-  justify-content: flex-end;
-  padding: 0 24px env(safe-area-inset-bottom, 32px);
-  padding-bottom: max(env(safe-area-inset-bottom, 0px), 32px);
+  justify-content: center;
+  padding: max(env(safe-area-inset-top, 0px), 24px) 24px max(env(safe-area-inset-bottom, 0px), 24px);
   gap: 0;
 }
 
