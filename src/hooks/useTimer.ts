@@ -77,6 +77,12 @@ function playSound(audio: HTMLAudioElement | null, volume: number) {
 // audible frequency so Chrome/Android don't classify it as silent, but
 // −60 dB amplitude is imperceptible at any normal listening volume.
 
+// On mobile/Android Chrome a volume of 0 causes the browser to classify the
+// element as silent and eventually throttle/kill background tabs, so we clamp
+// to 0.01 (imperceptible but non-zero). On desktop this restriction isn't
+// needed and the user should be able to fully mute the bg track.
+const BG_VOL_MIN = navigator.maxTouchPoints > 0 ? 0.01 : 0
+
 function startBgAudio(
   ref: React.MutableRefObject<HTMLAudioElement | null>,
   track: 1 | 2 | 3,
@@ -86,7 +92,7 @@ function startBgAudio(
   try {
     const audio  = new Audio(`/sounds/bg${track}.mp3`)
     audio.loop   = true
-    audio.volume = Math.max(0.01, volume)
+    audio.volume = Math.max(BG_VOL_MIN, volume)
     audio.play().catch(() => { /* blocked — caller should retry via resumeBgAudio */ })
     ref.current  = audio
   } catch (e) {
@@ -367,7 +373,7 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
 
     // Notification permission — delegate all scheduling to the SW
     notifGrantedRef.current = await ensureNotificationPermission()
-    if (notifGrantedRef.current) {
+    if (notifGrantedRef.current && notifEnabledRef.current) {
       postToSW({ type: 'START_TIMER', mainMs, phase: phaseRef.current })
     }
   }, [config, updateDisplay, scheduleNextTick, rafLoop])
@@ -406,7 +412,7 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
   // Live-update bg volume while running
   useEffect(() => {
     if (!silentAudioRef.current) return
-    silentAudioRef.current.volume = Math.max(0.01, config.bgVolume)
+    silentAudioRef.current.volume = Math.max(BG_VOL_MIN, config.bgVolume)
   }, [config.bgVolume])
 
   // Cleanup on unmount
