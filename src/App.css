@@ -16,6 +16,19 @@
   --transition-fast: 180ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+[data-theme="light"] {
+  --bg:           #f5f5f7;
+  --surface:      #ffffff;
+  --surface-hi:   #ebebef;
+  --accent:       #6255e0;
+  --accent-dim:   #c4bffa;
+  --accent-glow:  rgba(98, 85, 224, 0.2);
+  --text:         #1a1a2e;
+  --text-muted:   #7a7a96;
+  --text-disabled:#c8c8d8;
+  --border:       rgba(0,0,0,0.09);
+}
+
 /* ── Reset ─────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -73,6 +86,65 @@ body {
   transform: scale(0.96);
   transition: opacity var(--transition), transform var(--transition);
   pointer-events: none;
+}
+
+/* ── Update banner ─────────────────────────────────────────── */
+.update-banner {
+  position: absolute;
+  top: max(env(safe-area-inset-top, 0px), 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 4px 20px var(--accent-glow);
+  animation: slideDown 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateX(-50%) translateY(-12px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ── Theme toggle ──────────────────────────────────────────── */
+.theme-btn {
+  position: absolute;
+  top: max(env(safe-area-inset-top, 0px), 16px);
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: color var(--transition-fast), border-color var(--transition-fast),
+              background var(--transition-fast), transform var(--transition-fast);
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  z-index: 10;
+}
+
+.theme-btn:hover {
+  color: var(--accent);
+  border-color: rgba(98,85,224,0.4);
+  background: var(--surface-hi);
+}
+
+.theme-btn:active {
+  transform: scale(0.9);
 }
 
 /* ── Version label ─────────────────────────────────────────── */
@@ -512,6 +584,35 @@ body {
   box-shadow: 0 0 6px var(--accent-glow);
 }
 
+.notif-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: var(--text-disabled);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: color var(--transition-fast), border-color var(--transition-fast),
+              background var(--transition-fast), transform var(--transition-fast);
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.notif-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(124,111,247,0.1);
+}
+
+.notif-btn:active {
+  transform: scale(0.9);
+}
+
 .volume-slider::-webkit-slider-thumb:hover {
   transform: scale(1.2);
   box-shadow: 0 0 12px var(--accent-glow);
@@ -647,6 +748,30 @@ body {
   accent-color: var(--accent);
   transform: rotate(-90deg);
   transform-origin: center;
+}
+
+/* ── Desktop card layout ───────────────────────────────────── */
+@media (min-width: 600px) {
+  html, body, #root {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .app {
+    position: relative;
+    width: 420px;
+    height: min(820px, 92dvh);
+    border-radius: 28px;
+    background: var(--surface);
+    box-shadow:
+      0 0 0 1px var(--border),
+      0 0 90px var(--accent-glow),
+      0 40px 80px rgba(0, 0, 0, 0.4);
+    overflow: hidden;
+  }
 }
 
 /* ── Picture-in-Picture ────────────────────────────────────── */
