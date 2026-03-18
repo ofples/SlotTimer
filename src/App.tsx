@@ -9,12 +9,15 @@ import { RunningScreen } from './components/RunningScreen'
 import { PipContent } from './components/PipContent'
 
 const STORAGE_KEY = 'slottimer-config'
+const THEME_KEY   = 'slottimer-theme'
 
 const DEFAULT_CONFIG: TimerConfig = {
   mainInterval: 30,
   subInterval: 5,
   snapEnabled: false,
   snapOffset: 0,
+  subEnabled: true,
+  notificationsEnabled: true,
   volume: 0.8,
   bgTrack: 1,
   bgVolume: 0.5,
@@ -37,10 +40,22 @@ function saveConfig(config: TimerConfig) {
 }
 
 export function App() {
+  const [theme, setTheme] = useState<'dark' | 'light'>(() =>
+    (localStorage.getItem(THEME_KEY) as 'dark' | 'light') ?? 'dark'
+  )
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem(THEME_KEY, theme)
+  }, [theme])
+
+  const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark')
+
   const [config, setConfig] = useState<TimerConfig>(loadConfig)
   const [appState, setAppState] = useState<AppState>(
     () => hasTimerSession() ? 'running' : 'config'
   )
+  const [updateReady, setUpdateReady] = useState(false)
 
   const { mainCountdown, subCountdown, progress, start, stop, resumeBgAudio } = useTimer(config)
 
@@ -48,6 +63,20 @@ export function App() {
   useEffect(() => {
     if (hasTimerSession()) start()
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Periodic SW update check — browser only checks on page load by default
+  useEffect(() => {
+    const check = async () => {
+      const reg = await navigator.serviceWorker?.getRegistration()
+      if (!reg) return
+      await reg.update()
+      if (reg.waiting) setUpdateReady(true)
+    }
+
+    check() // check once on mount too (catches updates since last load)
+    const id = setInterval(check, 10 * 60 * 1000) // every 10 min
+    return () => clearInterval(id)
   }, [])
   const { isSupported: isPipSupported, isPip, pipContainer, open: openPip, close: closePip } = usePip()
 
@@ -72,6 +101,17 @@ export function App() {
     else openPip()
   }
 
+  const applyUpdate = async () => {
+    const reg = await navigator.serviceWorker?.getRegistration()
+    const sw = reg?.waiting
+    if (sw) {
+      sw.postMessage({ type: 'SKIP_WAITING' })
+      navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true })
+    } else {
+      location.reload()
+    }
+  }
+
   return (
     <div className="app">
       {appState === 'config' && (
@@ -80,6 +120,8 @@ export function App() {
           onChange={handleConfigChange}
           onStart={handleStart}
           visible
+          theme={theme}
+          onThemeToggle={toggleTheme}
         />
       )}
       {appState === 'running' && (
@@ -100,6 +142,12 @@ export function App() {
           onBgVolumeChange={v => handleConfigChange({ ...config, bgVolume: v })}
           onResumeBgAudio={resumeBgAudio}
         />
+      )}
+
+      {updateReady && (
+        <button className="update-banner" onClick={applyUpdate}>
+          Update available — tap to reload
+        </button>
       )}
 
       {pipContainer && createPortal(

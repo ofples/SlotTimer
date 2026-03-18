@@ -25,9 +25,11 @@ interface Props {
   onChange: (c: TimerConfig) => void
   onStart: () => void
   visible: boolean
+  theme: 'dark' | 'light'
+  onThemeToggle: () => void
 }
 
-export function ConfigScreen({ config, onChange, onStart, visible }: Props) {
+export function ConfigScreen({ config, onChange, onStart, visible, theme, onThemeToggle }: Props) {
   const set = <K extends keyof TimerConfig>(key: K, val: TimerConfig[K]) =>
     onChange({ ...config, [key]: val })
 
@@ -63,6 +65,8 @@ export function ConfigScreen({ config, onChange, onStart, visible }: Props) {
           pickerTitle="Sub interval (minutes)"
           pickerMin={1}
           pickerMax={config.mainInterval - 1}
+          toggle={config.subEnabled}
+          onToggle={v => set('subEnabled', v)}
         />
 
         <SnapConfig
@@ -87,6 +91,20 @@ export function ConfigScreen({ config, onChange, onStart, visible }: Props) {
               value={config.volume}
               onChange={e => set('volume', parseFloat(e.target.value))}
             />
+            <button
+              className={`notif-btn${config.notificationsEnabled ? ' active' : ''}`}
+              onClick={async () => {
+                const next = !config.notificationsEnabled
+                if (next && 'Notification' in window && Notification.permission === 'default') {
+                  await Notification.requestPermission()
+                }
+                set('notificationsEnabled', next)
+              }}
+              title={config.notificationsEnabled ? 'Disable notifications' : 'Enable notifications'}
+              aria-label={config.notificationsEnabled ? 'Disable notifications' : 'Enable notifications'}
+            >
+              <BellIcon on={config.notificationsEnabled} />
+            </button>
           </div>
         </div>
 
@@ -95,10 +113,60 @@ export function ConfigScreen({ config, onChange, onStart, visible }: Props) {
         </button>
       </div>
 
+      <button
+        className="theme-btn"
+        onClick={onThemeToggle}
+        title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+      >
+        <ThemeIcon dark={theme === 'dark'} />
+      </button>
+
       <span className="version-label" onDoubleClick={forceUpdate}>
         v{VERSION}
       </span>
     </div>
+  )
+}
+
+function ThemeIcon({ dark }: { dark: boolean }) {
+  if (dark) {
+    // Sun icon — click to go light
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <circle cx="12" cy="12" r="5" stroke="currentColor" strokeWidth="2" />
+        <line x1="12" y1="2"  x2="12" y2="4"  stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        <line x1="12" y1="20" x2="12" y2="22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        <line x1="2"  y1="12" x2="4"  y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        <line x1="20" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        <line x1="4.22"  y1="4.22"  x2="5.64"  y2="5.64"  stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        <line x1="4.22"  y1="19.78" x2="5.64"  y2="18.36" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        <line x1="18.36" y1="5.64"  x2="19.78" y2="4.22"  stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    )
+  }
+  // Moon icon — click to go dark
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"
+        stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function BellIcon({ on }: { on: boolean }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"
+        stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0"
+        stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      {!on && (
+        <line x1="2" y1="2" x2="22" y2="22"
+          stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      )}
+    </svg>
   )
 }
 

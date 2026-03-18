@@ -145,6 +145,7 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
   const phaseRef          = useRef(0)
   const mainIntervalMsRef = useRef(0)
   const subIntervalMsRef  = useRef(0)
+  const subEnabledRef     = useRef(true)
   const tickTimerRef      = useRef<ReturnType<typeof setTimeout> | null>(null)
   const rafRef            = useRef<number | null>(null)
   const isRunningRef      = useRef(false)
@@ -152,6 +153,7 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
   const bellRef           = useRef<HTMLAudioElement | null>(null)
   const wakeLockRef       = useRef<WakeLockSentinel | null>(null)
   const notifGrantedRef   = useRef(false)
+  const notifEnabledRef   = useRef(config.notificationsEnabled)
   const silentAudioRef    = useRef<HTMLAudioElement | null>(null)
 
   // Preload audio on mount
@@ -168,12 +170,13 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
     const subMs    = subIntervalMsRef.current
     const phase    = phaseRef.current
     const nextMain = nextTick(now, mainMs, phase)
-    const nextSub  = nextSubTick(now, mainMs, subMs, phase)
     const prog     = mainProgress(now, mainMs, phase)
 
     setState({
       mainCountdown: formatCountdown(nextMain - now),
-      subCountdown:  formatCountdown(nextSub  - now),
+      subCountdown:  subEnabledRef.current
+        ? formatCountdown(nextSubTick(now, mainMs, subMs, phase) - now)
+        : '--:--',
       progress: prog,
     })
   }, [])
@@ -187,7 +190,7 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
   // ── Notification helper ──────────────────────────────────────
 
   const fireNotification = useCallback(() => {
-    if (!notifGrantedRef.current) return
+    if (!notifGrantedRef.current || !notifEnabledRef.current) return
     // Only notify when hidden — the renderer already plays the gong when visible,
     // so firing a notification too would double up the sound.
     if (!document.hidden) return
@@ -210,7 +213,7 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
     const phase  = phaseRef.current
 
     const nextMain = nextTick(now, mainMs, phase)
-    const nextSub  = nextSubTick(now, mainMs, subMs, phase)
+    const nextSub  = subEnabledRef.current ? nextSubTick(now, mainMs, subMs, phase) : Infinity
     const nextFire = Math.min(nextMain, nextSub)
     const delay    = Math.max(0, nextFire - Date.now())
 
@@ -220,7 +223,7 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
 
       // Determine what fired (within 1s tolerance)
       const firedMain = Math.abs(fireTime - nextMain) < 1000
-      const firedSub  = !firedMain && Math.abs(fireTime - nextSub) < 1000
+      const firedSub  = !firedMain && nextSub !== Infinity && Math.abs(fireTime - nextSub) < 1000
 
       if (firedMain) {
         playSound(gongRef.current, config.volume)
@@ -238,6 +241,10 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
   useEffect(() => {
     const handleVisibility = async () => {
       if (document.visibilityState === 'visible' && isRunningRef.current) {
+        // Restart RAF loop — browser suspends requestAnimationFrame in backgrounded tabs
+        if (rafRef.current) cancelAnimationFrame(rafRef.current)
+        rafRef.current = requestAnimationFrame(rafLoop)
+
         if (tickTimerRef.current) clearTimeout(tickTimerRef.current)
         scheduleNextTick()
         updateDisplay()
@@ -266,6 +273,7 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
 
     mainIntervalMsRef.current = mainMs
     subIntervalMsRef.current  = subMs
+    subEnabledRef.current     = config.subEnabled
 
     // Restore saved phase if the interval settings match; otherwise compute fresh.
     const session = loadSession()
@@ -298,8 +306,17 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
       })
       navigator.mediaSession.playbackState = 'playing'
       navigator.mediaSession.setActionHandler('stop',  stop)
-      navigator.mediaSession.setActionHandler('pause', stop)
-      navigator.mediaSession.setActionHandler('play',  null)  // hide play button
+      // pause/play only affect bg audio — not the timer itself.
+      // This prevents system audio interruptions (calls, other apps) from
+      // stopping the timer via the MediaSession pause action.
+      navigator.mediaSession.setActionHandler('pause', () => {
+        silentAudioRef.current?.pause()
+        navigator.mediaSession.playbackState = 'paused'
+      })
+      navigator.mediaSession.setActionHandler('play', () => {
+        silentAudioRef.current?.play().catch(() => {})
+        navigator.mediaSession.playbackState = 'playing'
+      })
     }
 
     // Wake lock — keep screen on
@@ -355,6 +372,18 @@ export function useTimer(config: TimerConfig): UseTimerReturn {
     releaseWakeLock(wakeLockRef)
     stopBgAudio(silentAudioRef)
   }, [])
+
+  useEffect(() => { notifEnabledRef.current = config.notificationsEnabled }, [config.notificationsEnabled])
+
+  // Keep subEnabledRef in sync; reschedule so the next tick fires correctly.
+  useEffect(() => {
+    subEnabledRef.current = config.subEnabled
+    if (isRunningRef.current) {
+      if (tickTimerRef.current) clearTimeout(tickTimerRef.current)
+      scheduleNextTick()
+      updateDisplay()
+    }
+  }, [config.subEnabled, scheduleNextTick, updateDisplay])
 
   // Called from any user interaction on the running screen to unblock autoplay
   // when the timer was auto-restored after a page refresh.
