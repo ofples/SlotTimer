@@ -10,6 +10,8 @@ interface Props {
   pickerTitle?: string
   pickerMin?: number
   pickerMax?: number
+  toggle?: boolean       // if provided, shows a toggle switch next to the label
+  onToggle?: (v: boolean) => void
 }
 
 export function IntervalPicker({
@@ -21,34 +23,59 @@ export function IntervalPicker({
   pickerTitle = 'Custom interval',
   pickerMin = 1,
   pickerMax = 240,
+  toggle,
+  onToggle,
 }: Props) {
   const [showPicker, setShowPicker] = useState(false)
   const isCustom = !presets.includes(value)
+  const hasToggle = toggle !== undefined
+
+  const chips = (
+    <div className="chips">
+      {presets.map(p => {
+        const disabled = disabledAbove !== undefined && p >= disabledAbove
+        return (
+          <button
+            key={p}
+            className={`chip${value === p && !isCustom ? ' active' : ''}`}
+            disabled={disabled}
+            onClick={() => onChange(p)}
+          >
+            {p}
+          </button>
+        )
+      })}
+      <button
+        className={`chip${isCustom ? ' active' : ''}`}
+        onClick={() => setShowPicker(true)}
+      >
+        {isCustom ? `${value}` : '…'}
+      </button>
+    </div>
+  )
 
   return (
     <div className="config-section">
-      <span className="section-label">{label}</span>
-      <div className="chips">
-        {presets.map(p => {
-          const disabled = disabledAbove !== undefined && p >= disabledAbove
-          return (
-            <button
-              key={p}
-              className={`chip${value === p && !isCustom ? ' active' : ''}`}
-              disabled={disabled}
-              onClick={() => onChange(p)}
-            >
-              {p}
-            </button>
-          )
-        })}
-        <button
-          className={`chip${isCustom ? ' active' : ''}`}
-          onClick={() => setShowPicker(true)}
-        >
-          {isCustom ? `${value}` : '…'}
-        </button>
-      </div>
+      {hasToggle ? (
+        <>
+          <div className="toggle-row">
+            <span className="section-label">{label}</span>
+            <label className="toggle">
+              <input type="checkbox" checked={toggle} onChange={e => onToggle?.(e.target.checked)} />
+              <span className="toggle-track" />
+              <span className="toggle-thumb" />
+            </label>
+          </div>
+          <div className={`snap-offset${toggle ? ' open' : ''}`}>
+            <div className="snap-offset-inner">{chips}</div>
+          </div>
+        </>
+      ) : (
+        <>
+          <span className="section-label">{label}</span>
+          {chips}
+        </>
+      )}
 
       {showPicker && (
         <CustomMinutePicker
